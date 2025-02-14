@@ -1,10 +1,48 @@
 # Basic Makefile
 
 UUID = dash-to-dock@micxgx.gmail.com
-BASE_MODULES = extension.js stylesheet.css metadata.json COPYING README.md
-EXTRA_MODULES = dash.js docking.js appIcons.js appIconIndicators.js fileManager1API.js launcherAPI.js locations.js windowPreview.js intellihide.js prefs.js theming.js utils.js dbusmenuUtils.js Settings.ui
-EXTRA_MEDIA = logo.svg glossy.svg highlight_stacked_bg.svg highlight_stacked_bg_h.svg
-TOLOCALIZE =  prefs.js appIcons.js locations.js
+BASE_MODULES = extension.js \
+               metadata.json \
+               COPYING \
+               README.md \
+               $(NULL)
+
+EXTRA_MODULES = \
+                appSpread.js \
+                dash.js \
+                docking.js \
+                appIcons.js \
+				appIconsDecorator.js \
+                appIconIndicators.js \
+                fileManager1API.js \
+                imports.js \
+                launcherAPI.js \
+                locations.js \
+                locationsWorker.js \
+                notificationsMonitor.js \
+                windowPreview.js \
+                intellihide.js \
+                prefs.js \
+                theming.js \
+                utils.js \
+                dbusmenuUtils.js \
+                desktopIconsIntegration.js \
+                Settings.ui \
+                $(NULL)
+
+EXTRA_MEDIA = logo.svg \
+              glossy.svg \
+              highlight_stacked_bg.svg \
+              highlight_stacked_bg_h.svg \
+              $(NULL)
+
+TOLOCALIZE =  prefs.js \
+			  docking.js \
+              appIcons.js \
+              appIconsDecorator.js \
+              locations.js \
+              $(NULL)
+
 MSGSRC = $(wildcard po/*.po)
 ifeq ($(strip $(DESTDIR)),)
 	INSTALLTYPE = local
@@ -31,8 +69,10 @@ all: extension
 
 clean:
 	rm -f ./schemas/gschemas.compiled
+	rm -f stylesheet.css
+	rm -rf _build
 
-extension: ./schemas/gschemas.compiled $(MSGSRC:.po=.mo)
+extension: ./schemas/gschemas.compiled ./stylesheet.css $(MSGSRC:.po=.mo)
 
 ./schemas/gschemas.compiled: ./schemas/org.gnome.shell.extensions.dash-to-dock.gschema.xml
 	glib-compile-schemas ./schemas/
@@ -46,12 +86,23 @@ mergepo: potfile
 
 ./po/dashtodock.pot: $(TOLOCALIZE) Settings.ui
 	mkdir -p po
-	xgettext -k --keyword=__ --keyword=N__ --add-comments='Translators:' -o po/dashtodock.pot --package-name "Dash to Dock" $(TOLOCALIZE)
+	xgettext --keyword=__ --keyword=N__ --add-comments='Translators:' -o po/dashtodock.pot --package-name "Dash to Dock" --from-code=utf-8 $(TOLOCALIZE)
 	intltool-extract --type=gettext/glade Settings.ui
-	xgettext -k --keyword=_ --keyword=N_ --join-existing -o po/dashtodock.pot Settings.ui.h
+	xgettext --keyword=_ --keyword=N_ --join-existing -o po/dashtodock.pot Settings.ui.h
 
 ./po/%.mo: ./po/%.po
 	msgfmt -c $< -o $@
+
+./stylesheet.css: ./_stylesheet.scss
+ifeq ($(SASS), ruby)
+	sass --sourcemap=none --no-cache --scss _stylesheet.scss stylesheet.css
+else ifeq ($(SASS), dart)
+	sass --no-source-map _stylesheet.scss stylesheet.css
+else ifeq ($(SASS), sassc)
+	sassc --omit-map-comment _stylesheet.scss stylesheet.css
+else
+	sassc --omit-map-comment _stylesheet.scss stylesheet.css
+endif
 
 install: install-local
 
@@ -69,7 +120,7 @@ endif
 	-rm -fR _build
 	echo done
 
-zip-file: _build
+zip-file: _build check
 	cd _build ; \
 	zip -qr "$(UUID)$(VSTRING).zip" .
 	mv _build/$(UUID)$(VSTRING).zip ./
@@ -79,6 +130,8 @@ _build: all
 	-rm -fR ./_build
 	mkdir -p _build
 	cp $(BASE_MODULES) $(EXTRA_MODULES) _build
+	cp -a dependencies _build
+	cp stylesheet.css _build
 	mkdir -p _build/media
 	cd media ; cp $(EXTRA_MEDIA) ../_build/media/
 	mkdir -p _build/schemas
@@ -92,3 +145,14 @@ _build: all
 		cp $$l $$lf/LC_MESSAGES/dashtodock.mo; \
 	done;
 	sed -i 's/"version": -1/"version": "$(VERSION)"/'  _build/metadata.json;
+
+ifeq ($(strip $(ESLINT)),)
+    ESLINT = eslint
+endif
+
+ifneq ($(strip $(ESLINT_TAP)),)
+    ESLINT_ARGS = -f tap
+endif
+
+check:
+	ESLINT_USE_FLAT_CONFIG=false $(ESLINT) $(ESLINT_ARGS) .
